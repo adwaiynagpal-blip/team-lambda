@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Motor & Brush Controller</title>
+<style>
+body {
+  font-family: 'Segoe UI', Tahoma, sans-serif;
+  background: #111;
+  color: #eee;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1.5rem;
+}
+h1 { color: #4CAF50; margin-bottom: 1rem; }
+.card {
+  background: #1b1b1b;
+  border-radius: 12px;
+  padding: 1rem 1.5rem;
+  margin: 1rem 0;
+  max-width: 420px;
+  width: 100%;
+  box-shadow: 0 0 12px rgba(0,0,0,0.5);
+}
+label { font-size: 0.9rem; display: block; margin-bottom: 0.3rem; }
+input[type="range"] { width: 100%; }
+button {
+  background: #4CAF50; color: #fff; border: none;
+  padding: 0.6rem 1rem; margin: 0.3rem;
+  border-radius: 6px; cursor: pointer;
+  font-size: 1rem; transition: background 0.2s ease;
+}
+button:hover { background: #45a049; }
+.stop-btn {
+  background: #f44336;
+}
+.stop-btn:hover { background: #da190b; }
+.log {
+  background: #1b1b1b; border-radius: 12px;
+  padding: 1rem; max-width: 420px; width: 100%;
+  max-height: 200px; overflow-y: auto;
+}
+.log h2 { margin: 0 0 0.5rem; color: #4CAF50; font-size: 1.1rem; }
+.log-entry { font-family: monospace; font-size: 0.9rem; margin: 0.2rem 0; }
+</style>
+</head>
+<body>
+<h1>Motor & Brush Control</h1>
+
+<div class="card">
+  <label>Device IP Address</label>
+  <input id="ip" type="text" placeholder="e.g. 192.168.4.1"
+         style="width:100%;padding:0.5rem;background:#2a2a2a;color:#eee;border:none;border-radius:6px;">
+</div>
+
+<!-- Drive Motor -->
+<div class="card">
+  <h2>Drive Motor</h2>
+  <label>Speed: <span id="driveVal">128</span></label>
+  <input id="driveRange" type="range" min="0" max="255" value="128"
+         oninput="document.getElementById('driveVal').textContent=this.value">
+  <button onclick="send('fm',driveRange.value)">Forward</button>
+  <button onclick="send('rm',driveRange.value)">Reverse</button>
+  <button class="stop-btn" onclick="sendStop('b')">Stop</button>
+</div>
+
+<!-- Brush -->
+<div class="card">
+  <h2>Brush</h2>
+  <label>Speed: <span id="brushVal">128</span></label>
+  <input id="brushRange" type="range" min="0" max="255" value="128"
+         oninput="document.getElementById('brushVal').textContent=this.value">
+  <button onclick="send('fb',brushRange.value)">Forward</button>
+  <button onclick="send('rb',brushRange.value)">Reverse</button>
+  <button class="stop-btn" onclick="sendStop('s')">Stop</button>
+</div>
+
+<!-- Linear Actuator -->
+<div class="card">
+  <h2>Linear Actuator</h2>
+  <label>Speed: <span id="actVal">128</span></label>
+  <input id="actRange" type="range" min="0" max="255" value="128"
+         oninput="document.getElementById('actVal').textContent=this.value">
+  <button onclick="send('fl',actRange.value)">Forward</button>
+  <button onclick="send('rl',actRange.value)">Reverse</button>
+  <button class="stop-btn" onclick="sendStop('p')">Stop</button>
+</div>
+
+<!-- Log -->
+<div class="log" id="log">
+  <h2>Command Log</h2>
+</div>
+
+<script>
+function addLogEntry(text, success=true){
+  const log = document.getElementById('log');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  entry.style.color = success ? '#7CFC00' : '#FF6347';
+  entry.textContent = `[${new Date().toLocaleTimeString()}] ${text}`;
+  log.appendChild(entry);
+  log.scrollTop = log.scrollHeight;
+}
+
+async function send(prefix, val){
+  const ip = document.getElementById('ip').value.trim();
+  if(!ip){ addLogEntry('No IP set', false); return; }
+  const cmd = prefix + val;
+  // *** Updated URL format to match ESP32 handler ***
+  const url = `http://${ip}/data?cmd=${cmd}`;
+  addLogEntry(`Sending ${cmd} to ${ip} ...`);
+  try {
+    const res = await fetch(url);
+    if(res.ok) addLogEntry(`✓ Sent ${cmd}`);
+    else addLogEntry(`✗ Error ${res.status}`, false);
+  } catch(e){
+    addLogEntry(`✗ Failed to reach ${ip}`, false);
+  }
+}
+
+async function sendStop(stopCmd){
+  const ip = document.getElementById('ip').value.trim();
+  if(!ip){ addLogEntry('No IP set', false); return; }
+  const url = `http://${ip}/data?cmd=${stopCmd}`;
+  addLogEntry(`Sending ${stopCmd} to ${ip} ...`);
+  try {
+    const res = await fetch(url);
+    if(res.ok) addLogEntry(`✓ Sent ${stopCmd}`);
+    else addLogEntry(`✗ Error ${res.status}`, false);
+  } catch(e){
+    addLogEntry(`✗ Failed to reach ${ip}`, false);
+  }
+}
+</script>
+</body>
+</html>
