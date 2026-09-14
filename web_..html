@@ -175,10 +175,43 @@ button:active { transform: translateY(0); filter: brightness(0.95); }
 .log::-webkit-scrollbar-track { background: transparent; }
 .log::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
 .log::-webkit-scrollbar-thumb:hover { background: #4CAF50; }
+
+.proxy-status {
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #aaa;
+  margin-bottom: 0.3rem;
+  padding: 0.55rem 0.9rem;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  letter-spacing: 0.2px;
+}
+.proxy-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: #555;
+  flex-shrink: 0;
+  transition: background 0.3s;
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.4);
+}
+.proxy-dot.ok   { background: #4CAF50; box-shadow: 0 0 6px rgba(76,175,80,0.7); }
+.proxy-dot.fail { background: #f44336; box-shadow: 0 0 6px rgba(244,67,54,0.7); }
 </style>
 </head>
 <body>
 <h1>Motor &amp; Brush Control</h1>
+
+<!-- Proxy status -->
+<div class="proxy-status" id="proxyStatus">
+  <div class="proxy-dot" id="proxyDot"></div>
+  <span id="proxyLabel">Checking local proxy…</span>
+</div>
 
 <!-- IP -->
 <div class="card">
@@ -231,8 +264,32 @@ button:active { transform: translateY(0); filter: brightness(0.95); }
 </div>
 
 <script>
+const PROXY = 'http://localhost:8080';
+
+// ── Proxy health check ──────────────────────────────────────────────────────
+async function checkProxy() {
+  const dot   = document.getElementById('proxyDot');
+  const label = document.getElementById('proxyLabel');
+  try {
+    const res = await fetch(`${PROXY}/health`, { signal: AbortSignal.timeout(2000) });
+    if (res.ok) {
+      dot.className   = 'proxy-dot ok';
+      label.textContent = 'Local proxy running — ready to send commands';
+      return true;
+    }
+  } catch (_) {}
+  dot.className   = 'proxy-dot fail';
+  label.textContent = 'Local proxy not running — start it with: node proxy.js';
+  return false;
+}
+
+// Check on load, then every 5 s
+checkProxy();
+setInterval(checkProxy, 5000);
+
+// ── Logging ─────────────────────────────────────────────────────────────────
 function addLogEntry(text, success = true) {
-  const log = document.getElementById('log');
+  const log   = document.getElementById('log');
   const entry = document.createElement('div');
   entry.className = 'log-entry';
   entry.style.color = success ? '#7CFC00' : '#FF6347';
@@ -241,32 +298,39 @@ function addLogEntry(text, success = true) {
   log.scrollTop = log.scrollHeight;
 }
 
+// ── Core fetch — all requests go through the local proxy ────────────────────
+async function sendCmd(ip, cmd) {
+  const url = `${PROXY}/proxy?ip=${encodeURIComponent(ip)}&cmd=${encodeURIComponent(cmd)}`;
+  const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+}
+
 async function send(prefix, val) {
   const ip = document.getElementById('ip').value.trim();
   if (!ip) { addLogEntry('No IP set', false); return; }
   const cmd = prefix + val;
-  const url = `http://${ip}/data?cmd=${cmd}`;
-  addLogEntry(`Sending ${cmd} to ${ip} ...`);
+  addLogEntry(`Sending ${cmd} to ${ip} …`);
   try {
-    const res = await fetch(url);
-    if (res.ok) addLogEntry(`✓ Sent ${cmd}`);
-    else addLogEntry(`✗ Error ${res.status}`, false);
+    await sendCmd(ip, cmd);
+    addLogEntry(`✓ Sent ${cmd}`);
   } catch (e) {
-    addLogEntry(`✗ Failed to reach ${ip}`, false);
+    const hint = e.message.includes('fetch') ? ' (is the proxy running? node proxy.js)' : '';
+    addLogEntry(`✗ Failed: ${e.message}${hint}`, false);
+    checkProxy();
   }
 }
 
 async function sendStop(stopCmd) {
   const ip = document.getElementById('ip').value.trim();
   if (!ip) { addLogEntry('No IP set', false); return; }
-  const url = `http://${ip}/data?cmd=${stopCmd}`;
-  addLogEntry(`Sending ${stopCmd} to ${ip} ...`);
+  addLogEntry(`Sending stop (${stopCmd}) to ${ip} …`);
   try {
-    const res = await fetch(url);
-    if (res.ok) addLogEntry(`✓ Sent ${stopCmd}`);
-    else addLogEntry(`✗ Error ${res.status}`, false);
+    await sendCmd(ip, stopCmd);
+    addLogEntry(`✓ Sent stop (${stopCmd})`);
   } catch (e) {
-    addLogEntry(`✗ Failed to reach ${ip}`, false);
+    const hint = e.message.includes('fetch') ? ' (is the proxy running? node proxy.js)' : '';
+    addLogEntry(`✗ Failed: ${e.message}${hint}`, false);
+    checkProxy();
   }
 }
 </script>
