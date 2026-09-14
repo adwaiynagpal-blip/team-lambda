@@ -1,0 +1,5 @@
+{
+  "buildCommand": "cd motor-controller && npm install && npm run build",
+  "outputDirectory": "motor-controller/dist",
+  "framework": null
+}
